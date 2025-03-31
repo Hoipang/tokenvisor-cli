@@ -1,0 +1,17 @@
+api:
+  address: 192.168.80.77
+  port: 8000
+
+model:
+  model_name: Qwen/Qwen1.5-7B-Chat
+
+resources:
+  cpus: 8
+  memory: 32
+  ports: 8000
+  accelerators: MI300:1
+  image_id: docker:vllm/vllm-openai:latest
+
+service:
+  ports: 8000
+  readiness_probe: /v1/models
