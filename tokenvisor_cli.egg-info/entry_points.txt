@@ -1,2 +1,0 @@
-[console_scripts]
-tokenvisor-cli = tokenvisor_cli.main:cli

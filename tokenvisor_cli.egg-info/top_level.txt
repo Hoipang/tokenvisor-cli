@@ -1,1 +1,0 @@
-tokenvisor_cli
