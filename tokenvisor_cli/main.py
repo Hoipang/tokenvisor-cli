@@ -12,6 +12,21 @@ class APIConfig:
 
 
 @dataclass
+class EnvConfig:
+    VLLM_USE_TRITON_FLASH_ATTN: bool = False
+    VLLM_ROCM_USE_AITER: bool = True
+    VLLM_ROCM_USE_AITER_LINEAR: bool = True
+    VLLM_ROCM_USE_AITER_MOE: bool = True
+    VLLM_ROCM_USE_AITER_FP8_BLOCK_SCALED_MOE: bool = False
+    VLLM_ROCM_USE_AITER_RMSNORM: bool = True
+    VLLM_WORKER_MULTIPROC_METHOD: str = "spawn"
+    VLLM_IMAGE_FETCH_TIMEOUT: int = 5
+    VLLM_VIDEO_FETCH_TIMEOUT: int = 30
+    VLLM_AUDIO_FETCH_TIMEOUT: int = 10
+    VLLM_RPC_TIMEOUT: int = 10000
+
+
+@dataclass
 class ModelConfig:
     model_name: str
     hf_token: Optional[str] = None
@@ -103,6 +118,37 @@ class ConfigReader:
             pass
             raise click.ClickException(f"API Health Check failed: {e}")
 
+    def _validate_env_section(self, config: Dict[str, Any]) -> None:
+        """Validate the Resources section of the configuration."""
+        self._validate_section_exists(config, "envs")
+        envs_section = config["envs"]
+
+        if not isinstance(envs_section, dict):
+            raise click.ClickException("Resources section must be a dictionary")
+
+        required_fields = ["VLLM_USE_TRITON_FLASH_ATTN", "VLLM_ROCM_USE_AITER"]
+        for field in required_fields:
+            self._validate_field_exists_and_non_empty(envs_section, field, "envs")
+
+        # Validate types of environment variables if they exist
+        valid_types = {
+            "VLLM_ROCM_USE_AITER_LINEAR": bool,
+            "VLLM_ROCM_USE_AITER_MOE": bool,
+            "VLLM_ROCM_USE_AITER_FP8_BLOCK_SCALED_MOE": bool,
+            "VLLM_ROCM_USE_AITER_RMSNORM": bool,
+            "VLLM_WORKER_MULTIPROC_METHOD": str,
+            "VLLM_IMAGE_FETCH_TIMEOUT": int,
+            "VLLM_VIDEO_FETCH_TIMEOUT": int,
+            "VLLM_AUDIO_FETCH_TIMEOUT": int,
+            "VLLM_RPC_TIMEOUT": int,
+        }
+
+        for key, expected_type in valid_types.items():
+            if key in envs_section and not isinstance(envs_section[key], expected_type):
+                raise click.ClickException(
+                    f"Invalid type for {key} in env section. Expected {expected_type.__name__}"
+                )
+
     def _validate_model_section(self, config: Dict[str, Any]) -> None:
         """Validate the Model section of the configuration."""
         self._validate_section_exists(config, "model")
@@ -175,33 +221,34 @@ class ConfigReader:
             )
 
         # Remove 'docker:' prefix
-        image_path = image_id[7:]
+        # image_path = image_id[7:]
 
-        # Split into repository/image and tag
-        if ":" not in image_path:
-            raise click.ClickException(
-                f"Invalid Docker image format. Missing tag in: {image_id}"
-            )
+        # # Split into repository/image and tag
+        # if ":" not in image_path:
+        #     raise click.ClickException(
+        #         f"Invalid Docker image format. Missing tag in: {image_id}"
+        #     )
 
-        repo, tag = image_path.split(":", 1)
+        # repo, tag = image_path.split(":", 1)
 
-        # Docker Hub API endpoint
-        api_url = f"https://hub.docker.com/v2/repositories/{repo}/tags/{tag}/"
+        # # Docker Hub API endpoint
+        # api_url = f"https://hub.docker.com/v2/repositories/{repo}/tags/{tag}/"
 
-        try:
-            response = requests.get(api_url)
-            if response.status_code == 404:
-                raise click.ClickException(f"Docker image not found: {image_id}")
-            elif response.status_code != 200:
-                raise click.ClickException(
-                    f"Failed to check Docker image (status {response.status_code}): {image_id}"
-                )
-        except requests.RequestException as e:
-            raise click.ClickException(f"Error checking Docker image existence: {e}")
+        # try:
+        #     response = requests.get(api_url)
+        #     if response.status_code == 404:
+        #         raise click.ClickException(f"Docker image not found: {image_id}")
+        #     elif response.status_code != 200:
+        #         raise click.ClickException(
+        #             f"Failed to check Docker image (status {response.status_code}): {image_id}"
+        #         )
+        # except requests.RequestException as e:
+        #     raise click.ClickException(f"Error checking Docker image existence: {e}")
 
     def _validate_config(self, config: Dict[str, Any]) -> None:
         """Validate the complete configuration structure."""
         self._validate_api_section(config)
+        self._validate_env_section(config)  # Add this line
         self._validate_model_section(config)
         self._validate_resources_section(config)
         self._validate_service_section(config)
@@ -216,13 +263,35 @@ class ConfigReader:
         )
 
     @property
+    def env_config(self) -> EnvConfig:
+        """Get environment configuration."""
+        envs = self.config.get("envs", {})
+        return EnvConfig(
+            VLLM_USE_TRITON_FLASH_ATTN=envs["VLLM_USE_TRITON_FLASH_ATTN"],
+            VLLM_ROCM_USE_AITER=envs["VLLM_ROCM_USE_AITER"],
+            VLLM_ROCM_USE_AITER_LINEAR=envs.get("VLLM_ROCM_USE_AITER_LINEAR", True),
+            VLLM_ROCM_USE_AITER_MOE=envs.get("VLLM_ROCM_USE_AITER_MOE", True),
+            VLLM_ROCM_USE_AITER_FP8_BLOCK_SCALED_MOE=envs.get(
+                "VLLM_ROCM_USE_AITER_FP8_BLOCK_SCALED_MOE", False
+            ),
+            VLLM_ROCM_USE_AITER_RMSNORM=envs.get("VLLM_ROCM_USE_AITER_RMSNORM", True),
+            VLLM_WORKER_MULTIPROC_METHOD=envs.get(
+                "VLLM_WORKER_MULTIPROC_METHOD", "spawn"
+            ),
+            VLLM_IMAGE_FETCH_TIMEOUT=envs.get("VLLM_IMAGE_FETCH_TIMEOUT", 5),
+            VLLM_VIDEO_FETCH_TIMEOUT=envs.get("VLLM_VIDEO_FETCH_TIMEOUT", 30),
+            VLLM_AUDIO_FETCH_TIMEOUT=envs.get("VLLM_AUDIO_FETCH_TIMEOUT", 10),
+            VLLM_RPC_TIMEOUT=envs.get("VLLM_RPC_TIMEOUT", 10000),
+        )
+
+    @property
     def model_config(self) -> ModelConfig:
         """Get model configuration."""
         model = self.config["model"]
         return ModelConfig(
             model_name=model["model_name"],
             hf_token=model.get("hf_token"),
-            args=model.get("args"),  # Using get() to make hf_token optional
+            args=model.get("args"),
         )
 
     @property
@@ -269,12 +338,31 @@ def validate(file):
         click.echo(f"  Address: {api.address}")
         click.echo(f"  Port: {api.port}")
 
+        # Environment Configuration
+        env = config_reader.env_config
+        click.echo("\nEnvironment Configuration:")
+        click.echo(f"  VLLM_USE_TRITON_FLASH_ATTN: {env.VLLM_USE_TRITON_FLASH_ATTN}")
+        click.echo(f"  VLLM_ROCM_USE_AITER: {env.VLLM_ROCM_USE_AITER}")
+        click.echo(f"  VLLM_ROCM_USE_AITER_LINEAR: {env.VLLM_ROCM_USE_AITER_LINEAR}")
+        click.echo(f"  VLLM_ROCM_USE_AITER_MOE: {env.VLLM_ROCM_USE_AITER_MOE}")
+        click.echo(
+            f"  VLLM_ROCM_USE_AITER_FP8_BLOCK_SCALED_MOE: {env.VLLM_ROCM_USE_AITER_FP8_BLOCK_SCALED_MOE}"
+        )
+        click.echo(f"  VLLM_ROCM_USE_AITER_RMSNORM: {env.VLLM_ROCM_USE_AITER_RMSNORM}")
+        click.echo(
+            f"  VLLM_WORKER_MULTIPROC_METHOD: {env.VLLM_WORKER_MULTIPROC_METHOD}"
+        )
+        click.echo(f"  VLLM_IMAGE_FETCH_TIMEOUT: {env.VLLM_IMAGE_FETCH_TIMEOUT}")
+        click.echo(f"  VLLM_VIDEO_FETCH_TIMEOUT: {env.VLLM_VIDEO_FETCH_TIMEOUT}")
+        click.echo(f"  VLLM_AUDIO_FETCH_TIMEOUT: {env.VLLM_AUDIO_FETCH_TIMEOUT}")
+        click.echo(f"  VLLM_RPC_TIMEOUT: {env.VLLM_RPC_TIMEOUT}")
+
         # Model Configuration
         model = config_reader.model_config
         click.echo("\nModel Configuration:")
         click.echo(f"  Model Name: {model.model_name}")
         click.echo(f"  Huggingface Token: {model.hf_token}")
-        click.echo(f"  Huggingface Token: {model.args}")
+        click.echo(f"  vLLM engine args: {model.args}")
 
         # Resources Configuration
         res = config_reader.resources_config
@@ -291,7 +379,7 @@ def validate(file):
         click.echo(f"  Ports: {svc.ports}")
         click.echo(f"  Readiness Probe: {svc.readiness_probe}")
 
-        click.echo("Configuration is valid!")
+        click.echo("\n\nConfiguration is valid!")
     except click.ClickException as e:
         click.echo(f"Configuration error: {e}", err=True)
         raise click.Abort()
