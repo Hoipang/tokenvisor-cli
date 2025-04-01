@@ -1,9 +1,9 @@
 from setuptools import setup
 
 setup(
-    name="tokenvisor-cli",
+    name="mipod-cli",
     version="0.1.0",
-    packages=["tokenvisor_cli"],
+    packages=["mipod_cli"],
     install_requires=[
         # List your dependencies here
         "pyyaml>=6.0.2",
@@ -12,10 +12,10 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "tokenvisor-cli=tokenvisor_cli.main:cli",
+            "mipod-cli=mipod_cli.main:cli",
         ],
     },
     author="Embedded LLM",
-    description="Tokenvisor CLI to deploy & server LLM.",
+    description="AMD GPU Pod scheduling CLI to deploy & serve LLM.",
     license="MIT",
 )
